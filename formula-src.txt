@@ -1,0 +1,89 @@
+=LET(
+    /* ==== USER FILTER INPUTS ==== */
+    rarityFilter, IF(B3="","",B3),
+    locationFilter, IF(B4="","",B4),
+    stationFilter, IF(B5="","",B5),
+    dismantleFilter, IF(B6="","",B6),
+    showUnknown, C7,
+
+    /* ==== BASE TABLE REFERENCES ==== */
+    allCompIDs, tblComponent[ComponentID],
+    allCompNames, tblComponent[ComponentName],
+
+    /* ==== FILTER MATCHES ==== */
+    rarityMatch, IF(rarityFilter="",1,(tblComponent[ComponentRarity]=rarityFilter)*1),
+    locationIDs, IF(locationFilter="","",XLOOKUP(locationFilter,tblLocation[LocationName],tblLocation[LocationID])),
+    locationMatch, IF(locationFilter="",1,(COUNTIFS(tblComponentLocation[ComponentID],allCompIDs,tblComponentLocation[LocationID],locationIDs)>0)*1),
+    stationID, IF(stationFilter="","",XLOOKUP(stationFilter,tblCraftable[CraftableName],tblCraftable[CraftableID])),
+    stationMatch, IF(stationFilter="",1,(COUNTIFS(tblComponentUsage[ComponentID],allCompIDs,tblComponentUsage[CraftableID],stationID)>0)*1),
+    dismantleID, IF(dismantleFilter="","",XLOOKUP(dismantleFilter,tblComponent[ComponentName],tblComponent[ComponentID])),
+    dismantleMatch, IF(dismantleFilter="",1,(COUNTIFS(tblDismantleResults[SourceComponentID],allCompIDs,tblDismantleResults[ResultComponentID],dismantleID)>0)*1),
+
+    /* ==== KNOWN/UNKNOWN LOCATION LOGIC ==== */
+    hasKnownLoc, MAP(tblComponent[ComponentID],LAMBDA(id,COUNTIFS(tblComponentLocation[ComponentID],id)>0)),
+    showUnknownMatch, IF(showUnknown,1,hasKnownLoc*1),
+
+    /* ==== COMBINED FILTER ==== */
+    combinedMatch, rarityMatch*locationMatch*stationMatch*dismantleMatch*showUnknownMatch,
+
+    /* ==== RESULTS ==== */
+    resultName, FILTER(tblComponent[ComponentName],combinedMatch),
+    resultRarity, FILTER(tblComponent[ComponentRarity],combinedMatch),
+    resultPrice, FILTER(tblComponent[ComponentSellPrice],combinedMatch),
+    resultTotalNeeded, FILTER(MAP(tblComponent[ComponentID],LAMBDA(id,SUMIFS(tblComponentUsage[UsageQuantity],tblComponentUsage[ComponentID],id))),combinedMatch),
+
+    /* ==== USES (with error handling) ==== */
+    resultUses, FILTER(
+        MAP(tblComponent[ComponentID],
+            LAMBDA(id,
+                LET(
+                    useIDs, IFERROR(FILTER(tblComponentUsage[CraftableID],tblComponentUsage[ComponentID]=id),""),
+                    useQtys, IFERROR(FILTER(tblComponentUsage[UsageQuantity],tblComponentUsage[ComponentID]=id),""),
+                    useNames, IF(OR(useIDs="",ROWS(useIDs)=0),"",IFERROR(XLOOKUP(useIDs,tblCraftable[CraftableID],tblCraftable[CraftableName]),"")),
+                    uses, IF(OR(useNames="",ROWS(useNames)=0),"No known use",TEXTJOIN(", ",TRUE,useNames&" ("&useQtys&")")),
+                    uses
+                )
+            )
+        ),
+        combinedMatch
+    ),
+
+    /* ==== LOCATIONS (with error handling) ==== */
+    resultLocations, FILTER(
+        MAP(tblComponent[ComponentID],
+            LAMBDA(id,
+                LET(
+                    locs, IFERROR(FILTER(tblLocation[LocationName],
+                        ISNUMBER(MATCH(tblLocation[LocationID],
+                            FILTER(tblComponentLocation[LocationID],tblComponentLocation[ComponentID]=id),0)
+                        )
+                    ),""),
+                    IF(OR(locs="",ROWS(locs)=0),"Unknown",TEXTJOIN(", ",TRUE,locs))
+                )
+            )
+        ),
+        combinedMatch
+    ),
+
+    /* ==== DISMANTLES (with error handling) ==== */
+    resultDismantles, FILTER(
+        MAP(tblComponent[ComponentID],
+            LAMBDA(id,
+                LET(
+                    disIDs, IFERROR(FILTER(tblDismantleResults[ResultComponentID],tblDismantleResults[SourceComponentID]=id),""),
+                    disQtys, IFERROR(FILTER(tblDismantleResults[Quantity],tblDismantleResults[SourceComponentID]=id),""),
+                    disNames, IF(OR(disIDs="",ROWS(disIDs)=0),"",IFERROR(XLOOKUP(disIDs,tblComponent[ComponentID],tblComponent[ComponentName]),"")),
+                    dismantleText, IF(OR(disNames="",ROWS(disNames)=0),"Cannot be dismantled",TEXTJOIN(", ",TRUE,disNames&" ("&disQtys&"x)")),
+                    dismantleText
+                )
+            )
+        ),
+        combinedMatch
+    ),
+
+    /* ==== FINAL OUTPUT ==== */
+    IF(ROWS(resultName)=0,
+        "No results found",
+        HSTACK(resultName,resultRarity,resultPrice,resultTotalNeeded,resultUses,resultLocations,resultDismantles)
+    )
+)

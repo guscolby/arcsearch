@@ -14,12 +14,12 @@ def load_data():
     url = "https://raw.githubusercontent.com/guscolby/arcsearch/main/ARC%20RAIDERS%20MATS.xlsx"
     xls = pd.ExcelFile(url)
 
-    tbl_comp = pd.read_excel(xls, "tblComponent")
-    tbl_loc = pd.read_excel(xls, "tblLocation")
-    tbl_comp_loc = pd.read_excel(xls, "tblComponentLocation")
-    tbl_dismantle = pd.read_excel(xls, "tblDismantleResults")
-    tbl_craftable = pd.read_excel(xls, "tblCraftable")
-    tbl_usage = pd.read_excel(xls, "tblComponentUsage")
+    tbl_comp = pd.read_excel(xls, "03_Component")
+    tbl_loc = pd.read_excel(xls, "02_Location")
+    tbl_comp_loc = pd.read_excel(xls, "05_ComponentLocation")
+    tbl_dismantle = pd.read_excel(xls, "06_DismantleResults")
+    tbl_craftable = pd.read_excel(xls, "01_Craftable")
+    tbl_usage = pd.read_excel(xls, "04_ComponentUsage")
 
     # ---- Merge location names ----
     comp_loc = tbl_comp_loc.merge(tbl_loc, on="LocationID", how="left")
@@ -170,3 +170,4 @@ if not results.empty:
 
 else:
     st.warning("No matching items found. Try adjusting your search or filters.")
+

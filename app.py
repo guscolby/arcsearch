@@ -1,150 +1,116 @@
-# app.py
-import io
-import pandas as pd
 import streamlit as st
-from urllib.request import urlopen
-from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
+import pandas as pd
+from st_aggrid import AgGrid, GridOptionsBuilder
 
-st.set_page_config(layout="wide", page_title="Arc Raiders - Component Browser")
+# URL of the Excel file in your GitHub repo (raw file link)
+EXCEL_URL = "https://raw.githubusercontent.com/guscolby/arcsearch/main/ARC%20RAIDERS%20MATS.xlsx"
 
-# ---------- CONFIG ----------
-GITHUB_XLSX_URL = "https://raw.githubusercontent.com/guscolby/arcsearch/main/ARC%20RAIDERS%20MATS.xlsx"
-# ----------------------------
+st.set_page_config(page_title="ARC Raiders Material Search", layout="wide")
+st.title("🔍 ARC Raiders Material Search")
+st.caption("Interactive search powered by live data from the ARC RAIDERS MATS spreadsheet")
 
-@st.cache_data(ttl=300)
-def load_workbook(url: str):
-    """Fetches Excel workbook from GitHub (raw link)."""
-    data = urlopen(url).read()
-    xlsx = pd.read_excel(io.BytesIO(data), sheet_name=None, engine="openpyxl")
-    return xlsx
+@st.cache_data
+def load_data():
+    xls = pd.ExcelFile(EXCEL_URL)
 
-# --- Color helper ---
-RARITY_COLORS = {
-    "Common": "#CCCCCC",
-    "Uncommon": "#4CAF50",   # Green
-    "Rare": "#2196F3",       # Blue
-    "Epic": "#9C27B0",       # Purple
-    "Legendary": "#FF9800",  # Orange
-    "Green": "#4CAF50",
-    "Blue": "#2196F3",
-    "Purple": "#9C27B0",
-    "Orange": "#FF9800",
-    "Gray": "#9E9E9E",
+    craftables = pd.read_excel(xls, "01_Craftable")
+    components = pd.read_excel(xls, "03_Component")
+    comp_usage = pd.read_excel(xls, "04_ComponentUsage")
+    comp_loc = pd.read_excel(xls, "05_ComponentLocation")
+    dismantle = pd.read_excel(xls, "06_DismantleResults")
+    locations = pd.read_excel(xls, "02_Location")
+
+    # Merge ComponentLocation with Location to get readable names
+    comp_loc = comp_loc.merge(locations, on="LocationID", how="left")
+
+    # Build lookup tables
+    found_in = (
+        comp_loc.groupby("ComponentID")["LocationName"]
+        .apply(lambda x: ", ".join(sorted(set(x.dropna()))))
+        .rename("Found In")
+    )
+
+    used_in = (
+        comp_usage.merge(craftables, on="CraftableID", how="left")
+        .groupby("ComponentID")["CraftableName"]
+        .apply(lambda x: ", ".join(sorted(set(x.dropna()))))
+        .rename("Used In")
+    )
+
+    dismantle_to = (
+        dismantle.merge(components, left_on="ResultComponentID", right_on="ComponentID", suffixes=("", "_Result"))
+        .groupby("SourceComponentID")["ComponentName_Result"]
+        .apply(lambda x: ", ".join(sorted(set(x.dropna()))))
+        .rename("Dismantles To")
+    )
+
+    # Merge everything into the main components table
+    df = (
+        components.set_index("ComponentID")
+        .join(found_in)
+        .join(used_in)
+        .join(dismantle_to)
+        .reset_index()
+    )
+
+    # Handle missing data gracefully
+    df["Found In"].fillna("Unknown", inplace=True)
+    df["Used In"].fillna("No known use", inplace=True)
+    df["Dismantles To"].fillna("Cannot be dismantled", inplace=True)
+
+    return df
+
+df = load_data()
+
+# Sidebar filters
+st.sidebar.header("Filters")
+rarities = ["All"] + sorted(df["ComponentRarity"].dropna().unique())
+selected_rarity = st.sidebar.selectbox("Filter by rarity:", rarities)
+
+show_unknown = st.sidebar.checkbox("Show items with unknown location", value=True)
+
+# Apply filters
+filtered_df = df.copy()
+if selected_rarity != "All":
+    filtered_df = filtered_df[filtered_df["ComponentRarity"] == selected_rarity]
+
+if not show_unknown:
+    filtered_df = filtered_df[filtered_df["Found In"] != "Unknown"]
+
+# Rarity color coding (HTML)
+rarity_colors = {
+    "Common": "#b0b0b0",
+    "Green": "#00c000",
+    "Blue": "#0080ff",
+    "Purple": "#a000ff",
+    "Orange": "#ff8000",
+    "Legendary": "#ffcc00"
 }
 
-# --- Utility for applying rarity color ---
-def colorize_rarity(val):
-    if pd.isna(val):
-        return ""
-    color = RARITY_COLORS.get(val, "#FFFFFF")
-    return f'background-color: {color}; color: white; text-align: center; font-weight: bold;'
+def rarity_html(rarity):
+    color = rarity_colors.get(rarity, "#ffffff")
+    return f'<span style="color:{color}; font-weight:bold;">{rarity}</span>'
 
-# --- Load workbook ---
-with st.spinner("Loading workbook from GitHub..."):
-    xlsx = load_workbook(GITHUB_XLSX_URL)
+filtered_df["Rarity"] = filtered_df["ComponentRarity"].apply(rarity_html)
 
-# Get necessary sheets
-craft = xlsx.get("01_Craftable", pd.DataFrame())
-loc = xlsx.get("02_Location", pd.DataFrame())
-comp = xlsx.get("03_Component", pd.DataFrame())
-usage = xlsx.get("04_ComponentUsage", pd.DataFrame())
-comp_loc = xlsx.get("05_ComponentLocation", pd.DataFrame())
-dis = xlsx.get("06_DismantleResults", pd.DataFrame())
-
-# Normalize column names
-for df in [craft, loc, comp, usage, comp_loc, dis]:
-    df.columns = [str(c).strip() for c in df.columns]
-
-# --- Map columns (simplified) ---
-comp = comp.rename(columns={
-    "ComponentID": "ComponentID",
-    "ComponentName": "Name",
-    "ComponentRarity": "Rarity",
-    "ComponentSellPrice": "Sell Price"
-})
-
-# --- Build lookups ---
-craft_map = pd.Series(craft["CraftableName"].values, index=craft["CraftableID"]).to_dict()
-loc_map = pd.Series(loc["LocationName"].values, index=loc["LocationID"]).to_dict()
-comp_map = pd.Series(comp["Name"].values, index=comp["ComponentID"]).to_dict()
-
-# --- Uses text ---
-usage["Uses"] = usage.apply(
-    lambda r: f"{craft_map.get(r['CraftableID'], 'Unknown')} ({int(r['UsageQuantity'])}x)"
-    if not pd.isna(r["UsageQuantity"]) else "", axis=1)
-uses_joined = usage.groupby("ComponentID")["Uses"].apply(lambda x: ", ".join(x)).rename("Used In")
-
-# --- Locations ---
-comp_loc["FoundIn"] = comp_loc["LocationID"].map(loc_map)
-found_in = comp_loc.groupby("ComponentID")["FoundIn"].apply(lambda x: ", ".join(sorted(set(x)))).rename("Found In")
-
-# --- Dismantles ---
-dis["ResultName"] = dis["ResultComponentID"].map(comp_map)
-dis["DismantlesInto"] = dis.apply(
-    lambda r: f"{r['ResultName']} ({int(r['Quantity'])}x)" if not pd.isna(r["Quantity"]) else "", axis=1)
-dismantles_joined = dis.groupby("SourceComponentID")["DismantlesInto"].apply(lambda x: ", ".join(x)).rename("Dismantles Into")
-
-# --- Merge everything ---
-df = comp.merge(uses_joined, how="left", left_on="ComponentID", right_index=True)
-df = df.merge(found_in, how="left", left_on="ComponentID", right_index=True)
-df = df.merge(dismantles_joined, how="left", left_on="ComponentID", right_index=True)
-
-# --- Fill unknowns ---
-df["Used In"] = df["Used In"].fillna("No known use")
-df["Found In"] = df["Found In"].fillna("Unknown")
-df["Dismantles Into"] = df["Dismantles Into"].fillna("Cannot be dismantled")
-
-# --- Sidebar filters ---
-st.sidebar.header("Filters")
-rarities = ["All"] + sorted(df["Rarity"].dropna().unique().tolist())
-locations = ["All"] + sorted(loc["LocationName"].dropna().unique().tolist()) + ["Unknown"]
-
-rarity_choice = st.sidebar.selectbox("Rarity", rarities)
-location_choice = st.sidebar.selectbox("Location", locations)
-show_unknown = st.sidebar.checkbox("Show unknown locations", value=True)
-
-# --- Filtering ---
-filtered = df.copy()
-if rarity_choice != "All":
-    filtered = filtered[filtered["Rarity"] == rarity_choice]
-if location_choice != "All":
-    if location_choice == "Unknown":
-        filtered = filtered[filtered["Found In"] == "Unknown"]
-    else:
-        filtered = filtered[filtered["Found In"].str.contains(location_choice, na=False)]
-if not show_unknown:
-    filtered = filtered[filtered["Found In"] != "Unknown"]
-
-# --- Display count ---
-st.markdown(f"**Results:** {len(filtered)} components")
-
-# --- AG Grid setup ---
-gb = GridOptionsBuilder.from_dataframe(filtered)
-gb.configure_default_column(
-    wrapText=True,
-    autoHeight=True,
-    resizable=True,
-    sortable=True,
-    filter=True
-)
-gb.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=25)
+# Build grid
+gb = GridOptionsBuilder.from_dataframe(filtered_df[[
+    "ComponentName", "Rarity", "ComponentSellPrice", "Used In", "Found In", "Dismantles To"
+]])
+gb.configure_default_column(wrapText=True, autoHeight=True)
+gb.configure_grid_options(domLayout='autoHeight')
 grid_options = gb.build()
 
-st.markdown("### Component Browser")
+# Display grid
+st.markdown("### Results")
 AgGrid(
-    filtered,
+    filtered_df[[
+        "ComponentName", "Rarity", "ComponentSellPrice", "Used In", "Found In", "Dismantles To"
+    ]],
     gridOptions=grid_options,
-    update_mode=GridUpdateMode.NO_UPDATE,
+    enable_enterprise_modules=False,
     allow_unsafe_jscode=True,
-    height=650,
-    fit_columns_on_grid_load=True
+    height=600,
 )
 
-# --- CSV download ---
-csv = filtered.to_csv(index=False).encode("utf-8")
-st.download_button("Download filtered results as CSV", data=csv, file_name="components_filtered.csv", mime="text/csv")
-
-# --- Optional: styled rarity preview table ---
-st.markdown("### Rarity Color Legend")
-legend = pd.DataFrame(list(RARITY_COLORS.items()), columns=["Rarity", "Color"])
-st.dataframe(legend.style.applymap(lambda c: f"background-color:{RARITY_COLORS.get(c, '')};" if c in RARITY_COLORS else ""))
+st.caption("Update the spreadsheet in the GitHub repo to automatically refresh app data on next reload.")

@@ -269,19 +269,26 @@ grid_df = df_filtered[display_cols].rename(columns={
     "TotalNeeded": "Total Needed"
 })
 
-gb = GridOptionsBuilder.from_dataframe(grid_df)
-gb.configure_default_column(wrapText=True, autoHeight=True, resizable=True, sortable=True, filter=True)
-gb.configure_column("Rarity", cellRenderer='agGroupCellRenderer', cellRendererParams={'innerRenderer': 'function(params) {return params.value;} '})
-gb.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=20)
+# Build grid options
+gb = GridOptionsBuilder.from_dataframe(results)
+gb.configure_pagination(enabled=True)
+gb.configure_default_column(
+    groupable=False,
+    value=True,
+    enableRowGroup=False,
+    enablePivot=False,
+    enableValue=True,
+)
+gb.configure_selection('single')
 grid_options = gb.build()
 
+# Render AgGrid
 AgGrid(
-    grid_df,
+    results,
     gridOptions=grid_options,
-    allow_unsafe_jscode=True,
-    update_mode=GridUpdateMode.NO_UPDATE,
-    height=650,
-    fit_columns_on_grid_load=True
+    height=500,
+    theme="streamlit",
+    update_mode=GridUpdateMode.SELECTION_CHANGED,
 )
 
 # CSV download
@@ -291,3 +298,4 @@ def df_to_csv_bytes(df):
 
 csv_bytes = df_to_csv_bytes(df_filtered.drop(columns=["RarityBadge"], errors="ignore"))
 st.download_button("Download filtered results as CSV", data=csv_bytes, file_name="arc_components_filtered.csv", mime="text/csv")
+

@@ -2,29 +2,33 @@ import streamlit as st
 import pandas as pd
 from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 
+# ---------------------------------------------------------
+# APP CONFIG
+# ---------------------------------------------------------
 st.set_page_config(page_title="ARC Raiders Materials Search", layout="wide")
-st.title("🔍 ARC Raiders Materials Search")
-st.caption("Interactive search across all components, crafting, and dismantle data.")
+st.title("🔍 ARC Raiders Materials Search (PowerDashboard)")
+st.caption("Interactive browser for ARC Raiders components, crafting uses, and dismantle results.")
 
 # ---------------------------------------------------------
 # LOAD DATA
 # ---------------------------------------------------------
 @st.cache_data
 def load_data():
+    # GitHub raw XLSX URL
     url = "https://raw.githubusercontent.com/guscolby/arcsearch/main/ARC%20RAIDERS%20MATS.xlsx"
     xls = pd.ExcelFile(url)
 
-    tbl_comp = pd.read_excel(xls, "03_Component")
+    # Use the actual tab names in your workbook
+    tbl_craftable = pd.read_excel(xls, "01_Craftable")
     tbl_loc = pd.read_excel(xls, "02_Location")
+    tbl_comp = pd.read_excel(xls, "03_Component")
+    tbl_usage = pd.read_excel(xls, "04_ComponentUsage")
     tbl_comp_loc = pd.read_excel(xls, "05_ComponentLocation")
     tbl_dismantle = pd.read_excel(xls, "06_DismantleResults")
-    tbl_craftable = pd.read_excel(xls, "01_Craftable")
-    tbl_usage = pd.read_excel(xls, "04_ComponentUsage")
 
-    # ---- Merge location names ----
+    # ---- Merge Location Names ----
     comp_loc = tbl_comp_loc.merge(tbl_loc, on="LocationID", how="left")
 
-    # ---- Aggregate known locations ----
     found_in = (
         comp_loc.groupby("ComponentID")["LocationName"]
         .apply(lambda x: ", ".join(sorted(set(x.dropna()))))
@@ -32,7 +36,7 @@ def load_data():
         .reset_index()
     )
 
-    # ---- Aggregate dismantle results ----
+    # ---- Merge Dismantle Results ----
     dismantles = (
         tbl_dismantle.merge(
             tbl_comp[["ComponentID", "ComponentName"]],
@@ -44,16 +48,15 @@ def load_data():
         .groupby("SourceComponentID")
         .apply(
             lambda x: ", ".join(
-                f"{q}x {n}"
+                f"{int(q)}x {n}" if pd.notna(n) else ""
                 for q, n in zip(x["Quantity"], x["ComponentName_Result"])
-                if pd.notna(n)
             )
         )
         .rename("Recycles To")
         .reset_index()
     )
 
-    # ---- Aggregate usage (crafting recipes) ----
+    # ---- Merge Component Usage (Crafting) ----
     uses = (
         tbl_usage.merge(
             tbl_craftable[["CraftableID", "CraftableName"]],
@@ -63,21 +66,22 @@ def load_data():
         .groupby("ComponentID")
         .apply(
             lambda x: ", ".join(
-                f"{n} ({q}x)" for n, q in zip(x["CraftableName"], x["UsageQuantity"]) if pd.notna(n)
+                f"{n} ({int(q)}x)" if pd.notna(n) else ""
+                for n, q in zip(x["CraftableName"], x["UsageQuantity"])
             )
         )
         .rename("Used In")
         .reset_index()
     )
 
-    # ---- Merge everything together ----
+    # ---- Combine All Data ----
     merged = (
         tbl_comp.merge(found_in, on="ComponentID", how="left")
         .merge(dismantles, left_on="ComponentID", right_on="SourceComponentID", how="left")
         .merge(uses, on="ComponentID", how="left")
     )
 
-    # ---- Clean & format ----
+    # ---- Fill Missing Values ----
     merged["ComponentName"] = merged["ComponentName"].fillna("Unnamed Item")
     merged["ComponentRarity"] = merged["ComponentRarity"].fillna("Unknown")
     merged["ComponentSellPrice"] = merged["ComponentSellPrice"].fillna(0)
@@ -95,8 +99,8 @@ def load_data():
             "Location",
         ]
     ]
-
     merged.columns = ["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"]
+
     return merged
 
 
@@ -106,17 +110,22 @@ merged_df = load_data()
 # SIDEBAR FILTERS
 # ---------------------------------------------------------
 with st.sidebar:
-    st.header("Search Filters")
+    st.header("Filters")
     search_query = st.text_input("Search item name:", "")
+    rarity_options = ["All"] + sorted(merged_df["Rarity"].dropna().unique().tolist())
+    rarity_choice = st.selectbox("Rarity:", rarity_options)
     show_unknown = st.checkbox("Show items with unknown location", value=True)
 
 # ---------------------------------------------------------
-# APPLY FILTERS
+# FILTERING LOGIC
 # ---------------------------------------------------------
 filtered = merged_df.copy()
 
 if search_query:
     filtered = filtered[filtered["Name"].str.contains(search_query, case=False, na=False)]
+
+if rarity_choice != "All":
+    filtered = filtered[filtered["Rarity"] == rarity_choice]
 
 if not show_unknown:
     filtered = filtered[filtered["Location"] != "Unknown"]
@@ -127,47 +136,56 @@ results = filtered.copy()
 # RARITY COLOR STYLING
 # ---------------------------------------------------------
 rarity_colors = {
-    "Common": "white",
+    "Common": "#9E9E9E",
+    "Uncommon": "#4CAF50",
     "Green": "#4CAF50",
+    "Rare": "#2196F3",
     "Blue": "#2196F3",
+    "Epic": "#9C27B0",
     "Purple": "#9C27B0",
-    "Gold": "#FFC107",
-    "Legendary": "#FF5722",
-    "Unknown": "#9E9E9E",
+    "Legendary": "#FF9800",
+    "Gold": "#FFB300",
+    "Unknown": "#B0BEC5",
 }
 
-def rarity_color(val):
-    color = rarity_colors.get(val, "white")
-    return f"color: {color}; font-weight: bold;"
+def rarity_badge(rarity):
+    color = rarity_colors.get(str(rarity), "#FFFFFF")
+    return f"<div style='background-color:{color};color:white;padding:4px;border-radius:4px;text-align:center;font-weight:600'>{rarity}</div>"
+
+results["Rarity Display"] = results["Rarity"].apply(rarity_badge)
 
 # ---------------------------------------------------------
 # DISPLAY RESULTS
 # ---------------------------------------------------------
 if not results.empty:
-    st.markdown(f"### Search Results ({len(results)} items found)")
+    st.markdown(f"### Results ({len(results)} items found)")
 
-    gb = GridOptionsBuilder.from_dataframe(results)
-    gb.configure_pagination(enabled=True)
+    # AG Grid Configuration
+    grid_df = results[["Name", "Rarity Display", "Sell Price", "Used In", "Recycles To", "Location"]]
+    gb = GridOptionsBuilder.from_dataframe(grid_df)
     gb.configure_default_column(
-        groupable=False,
-        value=True,
-        enableRowGroup=False,
-        enablePivot=False,
-        enableValue=True,
-        wrapText=True,
-        autoHeight=True,
+        wrapText=True, autoHeight=True, resizable=True, sortable=True, filter=True
     )
-    gb.configure_selection('single')
+    gb.configure_pagination(enabled=True, paginationAutoPageSize=False, paginationPageSize=25)
     grid_options = gb.build()
 
     AgGrid(
-        results,
+        grid_df,
         gridOptions=grid_options,
-        height=600,
-        theme="streamlit",
-        update_mode=GridUpdateMode.SELECTION_CHANGED,
+        allow_unsafe_jscode=True,
+        height=650,
+        fit_columns_on_grid_load=True,
+        update_mode=GridUpdateMode.NO_UPDATE,
+    )
+
+    # CSV download
+    csv_data = results.drop(columns=["Rarity Display"], errors="ignore").to_csv(index=False).encode("utf-8")
+    st.download_button(
+        "Download filtered results as CSV",
+        data=csv_data,
+        file_name="arc_raiders_filtered.csv",
+        mime="text/csv",
     )
 
 else:
     st.warning("No matching items found. Try adjusting your search or filters.")
-

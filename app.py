@@ -23,14 +23,13 @@ def load_data():
     st.sidebar.write("Available sheets in Excel file:")
     st.sidebar.write(xls.sheet_names)
         
-    # Use the actual tab names in your workbook
-    # If these don't match, we'll need to adjust based on the actual sheet names
-    tbl_craftable = pd.read_excel(xls, "01_Craftable")
-    tbl_loc = pd.read_excel(xls, "02_Location")
-    tbl_comp = pd.read_excel(xls, "03_Component")
-    tbl_usage = pd.read_excel(xls, "04_ComponentUsage")
-    tbl_comp_loc = pd.read_excel(xls, "05_ComponentLocation")
-    tbl_dismantle = pd.read_excel(xls, "06_DismantleResults")
+    # Now using indexes instead of sheet names to get around missing tab names
+    tbl_craftable = pd.read_excel(xls, 1)
+    tbl_loc = pd.read_excel(xls, 2)
+    tbl_comp = pd.read_excel(xls, 3)
+    tbl_usage = pd.read_excel(xls, 4)
+    tbl_comp_loc = pd.read_excel(xls, 5)
+    tbl_dismantle = pd.read_excel(xls, 6)
 
     # ---- Merge Location Names ----
     comp_loc = tbl_comp_loc.merge(tbl_loc, on="LocationID", how="left")
@@ -195,4 +194,5 @@ if not results.empty:
 
 else:
     st.warning("No matching items found. Try adjusting your search or filters.")
+
 

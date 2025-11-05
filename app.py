@@ -16,8 +16,6 @@ st.caption("Interactive browser for ARC Raiders components, crafting uses, and d
 def load_data():
     # GitHub raw XLSX URL
     url = "https://raw.githubusercontent.com/guscolby/arcsearch/main/ARC%20RAIDERS%20MATS.xlsx"
-    
-    try:
         xls = pd.ExcelFile(url)
         
         # DEBUG: Print available sheet names
@@ -196,10 +194,3 @@ if not results.empty:
 
 else:
     st.warning("No matching items found. Try adjusting your search or filters.")
-
-
-    except Exception as e:
-        st.error(f"Error loading data: {e}")
-        # Return empty dataframe as fallback
-        return pd.DataFrame(columns=["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"])
-

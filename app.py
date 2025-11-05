@@ -58,27 +58,51 @@ def load_data():
         )
         st.sidebar.write(f"found_in shape: {found_in.shape}")
 
-        # ---- Merge Dismantle Results ----
-        st.sidebar.write("Merging dismantle data...")
-        dismantles = (
-            tbl_dismantle.merge(
-                tbl_comp[["ComponentID", "ComponentName"]],
-                left_on="ResultComponentID",
-                right_on="ComponentID",
-                how="left",
-                suffixes=("", "_Result"),
-            )
-            .groupby("SourceComponentID")
-            .apply(
-                lambda x: ", ".join(
-                    f"{int(q)}x {n}" if pd.notna(n) else ""
-                    for q, n in zip(x["Quantity"], x["ComponentName_Result"])
-                )
-            )
-            .rename("Recycles To")
-            .reset_index()
+# ---- Merge Dismantle Results ----
+st.sidebar.write("Merging dismantle data...")
+
+# Debug: Check what columns we have
+st.sidebar.write("tbl_dismantle columns:", list(tbl_dismantle.columns))
+st.sidebar.write("tbl_comp columns:", list(tbl_comp.columns))
+
+# Perform the merge
+dismantle_merged = tbl_dismantle.merge(
+    tbl_comp[["ComponentID", "ComponentName"]],
+    left_on="ResultComponentID",
+    right_on="ComponentID", 
+    how="left",
+    suffixes=("", "_Result"),
+)
+
+# Debug: Check what the merge produced
+st.sidebar.write("Merged dismantle columns:", list(dismantle_merged.columns))
+
+# Find the correct column name for the result component name
+result_name_col = None
+for col in dismantle_merged.columns:
+    if "ComponentName" in col and col != "ComponentName":
+        result_name_col = col
+        break
+if result_name_col is None:
+    # If no suffixed column found, try the original
+    result_name_col = "ComponentName"
+
+st.sidebar.write(f"Using column for result names: {result_name_col}")
+
+# Now process the dismantles
+dismantles = (
+    dismantle_merged
+    .groupby("SourceComponentID")
+    .apply(
+        lambda x: ", ".join(
+            f"{int(q)}x {n}" if pd.notna(n) and n != "" else ""
+            for q, n in zip(x["Quantity"], x[result_name_col])
         )
-        st.sidebar.write(f"dismantles shape: {dismantles.shape}")
+    )
+    .rename("Recycles To")
+    .reset_index()
+)
+st.sidebar.write(f"dismantles shape: {dismantles.shape}")
 
         # ---- Merge Component Usage (Crafting) ----
         st.sidebar.write("Merging usage data...")
@@ -225,6 +249,7 @@ if not results.empty:
 
 else:
     st.warning("No matching items found. Try adjusting your search or filters.")
+
 
 
 

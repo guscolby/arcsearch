@@ -134,25 +134,33 @@ merged_df = load_data()
 with st.sidebar:
     st.header("🔧 Filters")
     
-    # Text search filter
+    # Text search filter - at the top
     search_query = st.text_input("Search item name:", "")
     
-    # Rarity filter with "All" option
+    # Dismantle filter - search within "Recycles To" column - second in order
+    dismantle_query = st.text_input("Search dismantle results:", "")
+    
+    # Usage filter - search within "Used In" column - third in order
+    usage_query = st.text_input("Search usage (crafting):", "")
+    
+    # Location filter with "All" option - fourth in order
+    # Extract individual locations from comma-separated values
+    all_locations = []
+    for locations in merged_df["Location"].dropna():
+        # Split comma-separated locations and add individual ones
+        individual_locs = [loc.strip() for loc in str(locations).split(",")]
+        all_locations.extend(individual_locs)
+    
+    # Get unique individual locations and sort them
+    location_options = ["All"] + sorted(set([loc for loc in all_locations if loc and loc != "Unknown"]))
+    location_choice = st.selectbox("Location:", location_options)
+    
+    # Rarity filter with "All" option - fifth in order
     rarity_options = ["All"] + sorted(merged_df["Rarity"].dropna().unique().tolist())
     rarity_choice = st.selectbox("Rarity:", rarity_options)
     
-    # Location filter with "All" option
-    location_options = ["All"] + sorted(merged_df["Location"].dropna().unique().tolist())
-    location_choice = st.selectbox("Location:", location_options)
-    
-    # Usage filter - search within "Used In" column
-    usage_query = st.text_input("Search usage (crafting):", "")
-    
-    # Dismantle filter - search within "Recycles To" column  
-    dismantle_query = st.text_input("Search dismantle results:", "")
-    
-    # Toggle for unknown locations
-    show_unknown = st.checkbox("Show items with unknown location", value=True)
+    # Commented out - unknown locations checkbox (not functioning with current dataset)
+    # show_unknown = st.checkbox("Show items with unknown location", value=True)
 
 # ---------------------------------------------------------
 # FILTERING LOGIC
@@ -163,25 +171,25 @@ filtered = merged_df.copy()
 if search_query:
     filtered = filtered[filtered["Name"].str.contains(search_query, case=False, na=False)]
 
-# Apply rarity filter
-if rarity_choice != "All":
-    filtered = filtered[filtered["Rarity"] == rarity_choice]
-
-# Apply location filter  
-if location_choice != "All":
-    filtered = filtered[filtered["Location"] == location_choice]
+# Apply dismantle search
+if dismantle_query:
+    filtered = filtered[filtered["Recycles To"].str.contains(dismantle_query, case=False, na=False)]
 
 # Apply usage search
 if usage_query:
     filtered = filtered[filtered["Used In"].str.contains(usage_query, case=False, na=False)]
 
-# Apply dismantle search
-if dismantle_query:
-    filtered = filtered[filtered["Recycles To"].str.contains(dismantle_query, case=False, na=False)]
+# Apply location filter - check if any individual location matches
+if location_choice != "All":
+    filtered = filtered[filtered["Location"].str.contains(location_choice, case=False, na=False)]
 
-# Apply unknown location filter
-if not show_unknown:
-    filtered = filtered[filtered["Location"] != "Unknown"]
+# Apply rarity filter
+if rarity_choice != "All":
+    filtered = filtered[filtered["Rarity"] == rarity_choice]
+
+# Commented out - unknown locations filter (not functioning with current dataset)
+# if not show_unknown:
+#     filtered = filtered[filtered["Location"] != "Unknown"]
 
 results = filtered.copy()
 

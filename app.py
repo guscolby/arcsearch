@@ -196,9 +196,6 @@ results = filtered.copy()
 # ---------------------------------------------------------
 # DISPLAY RESULTS
 # ---------------------------------------------------------
-# ---------------------------------------------------------
-# DISPLAY RESULTS
-# ---------------------------------------------------------
 if not results.empty:
     st.markdown(f"### 📊 Results ({len(results)} items found)")
     
@@ -206,18 +203,6 @@ if not results.empty:
     grid_df = results[["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"]]
     
     gb = GridOptionsBuilder.from_dataframe(grid_df)
-    
-    # Add this function for rarity coloring
-    def rarity_color_styler(rarity):
-        color_map = {
-            "Gray": "#808080",    # Gray
-            "Green": "#00FF00",   # Green  
-            "Blue": "#0000FF",    # Blue
-            "Pink": "#FF69B4",    # Pink
-            "Yellow": "#FFFF00",  # Yellow
-        }
-        color = color_map.get(str(rarity), "#000000")
-        return f"color: {color}; font-weight: bold;"
     
     # Configure grid options
     gb.configure_default_column(
@@ -229,11 +214,18 @@ if not results.empty:
         flex=1
     )
     
-    # Set column-specific properties
+    # Set column-specific properties with simpler styling
     gb.configure_column("Name", flex=2, minWidth=150)
-    gb.configure_column("Rarity", width=120, cellStyle={"styleConditions": [
-        {"condition": "true", "style": rarity_color_styler}
-    ]})
+    gb.configure_column("Rarity", width=120, cellStyle={
+        "styleConditions": [
+            {"condition": "params.value == 'Gray'", "style": {"color": "#808080", "fontWeight": "bold"}},
+            {"condition": "params.value == 'Green'", "style": {"color": "#00FF00", "fontWeight": "bold"}},
+            {"condition": "params.value == 'Blue'", "style": {"color": "#0000FF", "fontWeight": "bold"}},
+            {"condition": "params.value == 'Pink'", "style": {"color": "#FF69B4", "fontWeight": "bold"}},
+            {"condition": "params.value == 'Yellow'", "style": {"color": "#FFFF00", "fontWeight": "bold"}},
+            {"condition": "true", "style": {"fontWeight": "bold"}}  # Default bold for other rarities
+        ]
+    })
     gb.configure_column("Sell Price", width=100)
     gb.configure_column("Used In", flex=3, minWidth=200)
     gb.configure_column("Recycles To", flex=3, minWidth=200)
@@ -244,14 +236,12 @@ if not results.empty:
     
     grid_options = gb.build()
 
-    # ... rest of your display code ...
-
     # Display the grid
     AgGrid(
         grid_df,
         gridOptions=grid_options,
         allow_unsafe_jscode=True,
-        height=min(800, 35 * len(results) + 100),  # Dynamic height based on results
+        height=min(800, 35 * len(results) + 100),
         fit_columns_on_grid_load=False,
         update_mode=GridUpdateMode.NO_UPDATE,
     )
@@ -267,4 +257,5 @@ if not results.empty:
 
 else:
     st.warning("🚫 No matching items found. Try adjusting your search or filters.")
+
 

@@ -196,6 +196,9 @@ results = filtered.copy()
 # ---------------------------------------------------------
 # DISPLAY RESULTS
 # ---------------------------------------------------------
+# ---------------------------------------------------------
+# DISPLAY RESULTS
+# ---------------------------------------------------------
 if not results.empty:
     st.markdown(f"### 📊 Results ({len(results)} items found)")
     
@@ -203,6 +206,18 @@ if not results.empty:
     grid_df = results[["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"]]
     
     gb = GridOptionsBuilder.from_dataframe(grid_df)
+    
+    # Add this function for rarity coloring
+    def rarity_color_styler(rarity):
+        color_map = {
+            "Gray": "#808080",    # Gray
+            "Green": "#00FF00",   # Green  
+            "Blue": "#0000FF",    # Blue
+            "Pink": "#FF69B4",    # Pink
+            "Yellow": "#FFFF00",  # Yellow
+        }
+        color = color_map.get(str(rarity), "#000000")
+        return f"color: {color}; font-weight: bold;"
     
     # Configure grid options
     gb.configure_default_column(
@@ -215,17 +230,21 @@ if not results.empty:
     )
     
     # Set column-specific properties
-    gb.configure_column("Name", flex=2, minWidth=150)  # More space for names
-    gb.configure_column("Rarity", width=120)
+    gb.configure_column("Name", flex=2, minWidth=150)
+    gb.configure_column("Rarity", width=120, cellStyle={"styleConditions": [
+        {"condition": "true", "style": rarity_color_styler}
+    ]})
     gb.configure_column("Sell Price", width=100)
-    gb.configure_column("Used In", flex=3, minWidth=200)  # More space for usage
-    gb.configure_column("Recycles To", flex=3, minWidth=200)  # More space for dismantles
-    gb.configure_column("Location", flex=2, minWidth=150)  # More space for locations
+    gb.configure_column("Used In", flex=3, minWidth=200)
+    gb.configure_column("Recycles To", flex=3, minWidth=200)
+    gb.configure_column("Location", flex=2, minWidth=150)
     
     # Show all results on one page
-    gb.configure_pagination(enabled=False)  # Disable pagination to show all results
+    gb.configure_pagination(enabled=False)
     
     grid_options = gb.build()
+
+    # ... rest of your display code ...
 
     # Display the grid
     AgGrid(
@@ -248,3 +267,4 @@ if not results.empty:
 
 else:
     st.warning("🚫 No matching items found. Try adjusting your search or filters.")
+

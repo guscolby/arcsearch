@@ -12,102 +12,133 @@ st.caption("Interactive browser for ARC Raiders components, crafting uses, and d
 # ---------------------------------------------------------
 # LOAD DATA
 # ---------------------------------------------------------
+
 @st.cache_data
 def load_data():
     # GitHub raw XLSX URL
     url = "https://raw.githubusercontent.com/guscolby/arcsearch/main/ARC%20RAIDERS%20MATS.xlsx"
+    
+    try:
+        xls = pd.ExcelFile(url)
         
-    xls = pd.ExcelFile(url)
+        # DEBUG: Print available sheet names
+        st.sidebar.write("Available sheets in Excel file:")
+        st.sidebar.write(xls.sheet_names)
         
-    # DEBUG: Print available sheet names
-    st.sidebar.write("Available sheets in Excel file:")
-    st.sidebar.write(xls.sheet_names)
+        # Now using indexes instead of sheet names to get around missing tab names
+        st.sidebar.write("Loading sheets...")
+        tbl_craftable = pd.read_excel(xls, 1)
+        st.sidebar.write(f"tbl_craftable shape: {tbl_craftable.shape}, columns: {list(tbl_craftable.columns)}")
         
-    # Now using indexes instead of sheet names to get around missing tab names
-    tbl_craftable = pd.read_excel(xls, 1)
-    tbl_loc = pd.read_excel(xls, 2)
-    tbl_comp = pd.read_excel(xls, 3)
-    tbl_usage = pd.read_excel(xls, 4)
-    tbl_comp_loc = pd.read_excel(xls, 5)
-    tbl_dismantle = pd.read_excel(xls, 6)
+        tbl_loc = pd.read_excel(xls, 2)
+        st.sidebar.write(f"tbl_loc shape: {tbl_loc.shape}, columns: {list(tbl_loc.columns)}")
+        
+        tbl_comp = pd.read_excel(xls, 3)
+        st.sidebar.write(f"tbl_comp shape: {tbl_comp.shape}, columns: {list(tbl_comp.columns)}")
+        
+        tbl_usage = pd.read_excel(xls, 4)
+        st.sidebar.write(f"tbl_usage shape: {tbl_usage.shape}, columns: {list(tbl_usage.columns)}")
+        
+        tbl_comp_loc = pd.read_excel(xls, 5)
+        st.sidebar.write(f"tbl_comp_loc shape: {tbl_comp_loc.shape}, columns: {list(tbl_comp_loc.columns)}")
+        
+        tbl_dismantle = pd.read_excel(xls, 6)
+        st.sidebar.write(f"tbl_dismantle shape: {tbl_dismantle.shape}, columns: {list(tbl_dismantle.columns)}")
 
-    # ---- Merge Location Names ----
-    comp_loc = tbl_comp_loc.merge(tbl_loc, on="LocationID", how="left")
+        # ---- Merge Location Names ----
+        st.sidebar.write("Merging location data...")
+        comp_loc = tbl_comp_loc.merge(tbl_loc, on="LocationID", how="left")
+        st.sidebar.write(f"comp_loc shape after merge: {comp_loc.shape}")
 
-    found_in = (
-        comp_loc.groupby("ComponentID")["LocationName"]
-        .apply(lambda x: ", ".join(sorted(set(x.dropna()))))
-        .rename("Location")
-        .reset_index()
-    )
-
-    # ---- Merge Dismantle Results ----
-    dismantles = (
-        tbl_dismantle.merge(
-            tbl_comp[["ComponentID", "ComponentName"]],
-            left_on="ResultComponentID",
-            right_on="ComponentID",
-            how="left",
-            suffixes=("", "_Result"),
+        found_in = (
+            comp_loc.groupby("ComponentID")["LocationName"]
+            .apply(lambda x: ", ".join(sorted(set(x.dropna()))))
+            .rename("Location")
+            .reset_index()
         )
-        .groupby("SourceComponentID")
-        .apply(
-            lambda x: ", ".join(
-                f"{int(q)}x {n}" if pd.notna(n) else ""
-                for q, n in zip(x["Quantity"], x["ComponentName_Result"])
+        st.sidebar.write(f"found_in shape: {found_in.shape}")
+
+        # ---- Merge Dismantle Results ----
+        st.sidebar.write("Merging dismantle data...")
+        dismantles = (
+            tbl_dismantle.merge(
+                tbl_comp[["ComponentID", "ComponentName"]],
+                left_on="ResultComponentID",
+                right_on="ComponentID",
+                how="left",
+                suffixes=("", "_Result"),
             )
-        )
-        .rename("Recycles To")
-        .reset_index()
-    )
-
-    # ---- Merge Component Usage (Crafting) ----
-    uses = (
-        tbl_usage.merge(
-            tbl_craftable[["CraftableID", "CraftableName"]],
-            on="CraftableID",
-            how="left",
-        )
-        .groupby("ComponentID")
-        .apply(
-            lambda x: ", ".join(
-                f"{n} ({int(q)}x)" if pd.notna(n) else ""
-                for n, q in zip(x["CraftableName"], x["UsageQuantity"])
+            .groupby("SourceComponentID")
+            .apply(
+                lambda x: ", ".join(
+                    f"{int(q)}x {n}" if pd.notna(n) else ""
+                    for q, n in zip(x["Quantity"], x["ComponentName_Result"])
+                )
             )
+            .rename("Recycles To")
+            .reset_index()
         )
-        .rename("Used In")
-        .reset_index()
-    )
+        st.sidebar.write(f"dismantles shape: {dismantles.shape}")
 
-    # ---- Combine All Data ----
-    merged = (
-        tbl_comp.merge(found_in, on="ComponentID", how="left")
-        .merge(dismantles, left_on="ComponentID", right_on="SourceComponentID", how="left")
-        .merge(uses, on="ComponentID", how="left")
-    )
+        # ---- Merge Component Usage (Crafting) ----
+        st.sidebar.write("Merging usage data...")
+        uses = (
+            tbl_usage.merge(
+                tbl_craftable[["CraftableID", "CraftableName"]],
+                on="CraftableID",
+                how="left",
+            )
+            .groupby("ComponentID")
+            .apply(
+                lambda x: ", ".join(
+                    f"{n} ({int(q)}x)" if pd.notna(n) else ""
+                    for n, q in zip(x["CraftableName"], x["UsageQuantity"])
+                )
+            )
+            .rename("Used In")
+            .reset_index()
+        )
+        st.sidebar.write(f"uses shape: {uses.shape}")
 
-    # ---- Fill Missing Values ----
-    merged["ComponentName"] = merged["ComponentName"].fillna("Unnamed Item")
-    merged["ComponentRarity"] = merged["ComponentRarity"].fillna("Unknown")
-    merged["ComponentSellPrice"] = merged["ComponentSellPrice"].fillna(0)
-    merged["Used In"] = merged["Used In"].fillna("No known use")
-    merged["Recycles To"] = merged["Recycles To"].fillna("Cannot be dismantled")
-    merged["Location"] = merged["Location"].fillna("Unknown")
+        # ---- Combine All Data ----
+        st.sidebar.write("Final merge...")
+        merged = (
+            tbl_comp.merge(found_in, on="ComponentID", how="left")
+            .merge(dismantles, left_on="ComponentID", right_on="SourceComponentID", how="left")
+            .merge(uses, on="ComponentID", how="left")
+        )
+        st.sidebar.write(f"Final merged shape: {merged.shape}")
 
-    merged = merged[
-        [
-            "ComponentName",
-            "ComponentRarity",
-            "ComponentSellPrice",
-            "Used In",
-            "Recycles To",
-            "Location",
+        # ---- Fill Missing Values ----
+        merged["ComponentName"] = merged["ComponentName"].fillna("Unnamed Item")
+        merged["ComponentRarity"] = merged["ComponentRarity"].fillna("Unknown")
+        merged["ComponentSellPrice"] = merged["ComponentSellPrice"].fillna(0)
+        merged["Used In"] = merged["Used In"].fillna("No known use")
+        merged["Recycles To"] = merged["Recycles To"].fillna("Cannot be dismantled")
+        merged["Location"] = merged["Location"].fillna("Unknown")
+
+        merged = merged[
+            [
+                "ComponentName",
+                "ComponentRarity",
+                "ComponentSellPrice",
+                "Used In",
+                "Recycles To",
+                "Location",
+            ]
         ]
-    ]
-    merged.columns = ["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"]
+        merged.columns = ["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"]
 
-    return merged
-
+        st.sidebar.write("Data loading completed successfully!")
+        return merged
+        
+    except Exception as e:
+        st.error(f"Error loading data: {str(e)}")
+        st.error(f"Error type: {type(e).__name__}")
+        import traceback
+        st.error(f"Traceback: {traceback.format_exc()}")
+        # Return empty dataframe as fallback
+        return pd.DataFrame(columns=["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"])
 
 merged_df = load_data()
 
@@ -194,5 +225,6 @@ if not results.empty:
 
 else:
     st.warning("No matching items found. Try adjusting your search or filters.")
+
 
 

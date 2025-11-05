@@ -16,15 +16,22 @@ st.caption("Interactive browser for ARC Raiders components, crafting uses, and d
 def load_data():
     # GitHub raw XLSX URL
     url = "https://raw.githubusercontent.com/guscolby/arcsearch/main/ARC%20RAIDERS%20MATS.xlsx"
-    xls = pd.ExcelFile(url)
-
-    # Use the actual tab names in your workbook
-    tbl_craftable = pd.read_excel(xls, "01_Craftable")
-    tbl_loc = pd.read_excel(xls, "02_Location")
-    tbl_comp = pd.read_excel(xls, "03_Component")
-    tbl_usage = pd.read_excel(xls, "04_ComponentUsage")
-    tbl_comp_loc = pd.read_excel(xls, "05_ComponentLocation")
-    tbl_dismantle = pd.read_excel(xls, "06_DismantleResults")
+    
+    try:
+        xls = pd.ExcelFile(url)
+        
+        # DEBUG: Print available sheet names
+        st.sidebar.write("Available sheets in Excel file:")
+        st.sidebar.write(xls.sheet_names)
+        
+        # Use the actual tab names in your workbook
+        # If these don't match, we'll need to adjust based on the actual sheet names
+        tbl_craftable = pd.read_excel(xls, "01_Craftable")
+        tbl_loc = pd.read_excel(xls, "02_Location")
+        tbl_comp = pd.read_excel(xls, "03_Component")
+        tbl_usage = pd.read_excel(xls, "04_ComponentUsage")
+        tbl_comp_loc = pd.read_excel(xls, "05_ComponentLocation")
+        tbl_dismantle = pd.read_excel(xls, "06_DismantleResults")
 
     # ---- Merge Location Names ----
     comp_loc = tbl_comp_loc.merge(tbl_loc, on="LocationID", how="left")
@@ -189,3 +196,10 @@ if not results.empty:
 
 else:
     st.warning("No matching items found. Try adjusting your search or filters.")
+
+
+    except Exception as e:
+        st.error(f"Error loading data: {e}")
+        # Return empty dataframe as fallback
+        return pd.DataFrame(columns=["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"])
+

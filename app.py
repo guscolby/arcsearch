@@ -6,7 +6,7 @@ from st_aggrid import AgGrid, GridOptionsBuilder, GridUpdateMode
 # APP CONFIG
 # ---------------------------------------------------------
 st.set_page_config(page_title="ARC Raiders Materials Search", layout="wide")
-st.title("🔍 ARC Raiders Materials Search")
+st.title("ARC Raiders Component Search")
 st.caption("Interactive browser for ARC Raiders components, crafting uses, and dismantle results.")
 
 # ---------------------------------------------------------
@@ -132,16 +132,16 @@ merged_df = load_data()
 # SIDEBAR FILTERS
 # ---------------------------------------------------------
 with st.sidebar:
-    st.header("🔧 Filters")
+    st.header("Filters")
     
     # Text search filter - at the top
-    search_query = st.text_input("Search item name:", "")
+    search_query = st.text_input("Component name:", "")
     
     # Dismantle filter - search within "Recycles To" column - second in order
-    dismantle_query = st.text_input("Search dismantle results:", "")
+    dismantle_query = st.text_input("Dismantle results:", "")
     
     # Usage filter - search within "Used In" column - third in order
-    usage_query = st.text_input("Search usage (crafting):", "")
+    usage_query = st.text_input("Usage (crafting, upgrades):", "")
     
     # Location filter with "All" option - fourth in order
     # Extract individual locations from comma-separated values
@@ -197,7 +197,7 @@ results = filtered.copy()
 # DISPLAY RESULTS
 # ---------------------------------------------------------
 if not results.empty:
-    st.markdown(f"### 📊 Results ({len(results)} items found)")
+    st.markdown(f"### Results ({len(results)} items found)")
     
     # Configure AG Grid for better display
     grid_df = results[["Name", "Rarity", "Sell Price", "Used In", "Recycles To", "Location"]]
@@ -257,5 +257,6 @@ if not results.empty:
 
 else:
     st.warning("🚫 No matching items found. Try adjusting your search or filters.")
+
 
 
